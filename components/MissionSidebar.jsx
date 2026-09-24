@@ -12,7 +12,9 @@ export default function MissionSidebar({
   waypointMode,
   setWaypointMode,
   hasWaypoints,
-  onExecuteMission
+  onExecuteMission,
+  onAbortMission,
+  missionActive
 }) {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -82,10 +84,41 @@ export default function MissionSidebar({
           <>
             <h2>EXECUTION</h2>
             <div style={{ marginTop: '16px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button className="upload-btn" onClick={onExecuteMission} style={{ background: 'rgba(34, 197, 94, 0.2)', borderColor: '#22c55e', color: '#22c55e', fontWeight: 'bold' }}>
-                EXECUTE MISSION
+              <button 
+                className="upload-btn" 
+                onClick={onExecuteMission} 
+                style={{ background: 'rgba(34, 197, 94, 0.2)', borderColor: '#22c55e', color: '#22c55e', fontWeight: 'bold' }}
+                disabled={missionActive}
+              >
+                {missionActive ? 'MISSION ACTIVE' : 'EXECUTE MISSION'}
               </button>
             </div>
+            
+            {missionActive && (
+              <div style={{ marginTop: '16px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.05)' }}>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#ef4444', textAlign: 'center' }}>⚠️ ABORT MISSION</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                  <button 
+                    onClick={() => onAbortMission(6)} // RTL
+                    style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    RTL
+                  </button>
+                  <button 
+                    onClick={() => onAbortMission(9)} // LAND
+                    style={{ background: '#f97316', color: 'white', border: 'none', padding: '8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    LAND
+                  </button>
+                  <button 
+                    onClick={() => onAbortMission(5)} // LOITER
+                    style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    HOLD
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

@@ -43,6 +43,7 @@ export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones
   const [manualLine, setManualLine] = useState([]); // Array of 2 points [lat, lng]
   const [waypointMode, setWaypointMode] = useState('idle'); // 'idle', 'drone0', 'drone1'
   const [wsStatus, setWsStatus] = useState('DISCONNECTED');
+  const [missionActive, setMissionActive] = useState(false);
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
 
@@ -224,7 +225,25 @@ export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones
       return;
     }
     alert("Mission Executing! (Waypoints sent to drones...)");
+    setMissionActive(true);
     // TODO: Send waypoints to drones via WebSocket or REST API
+  };
+
+  // ── Abort Mission ────────────────────────────────────────────────────────────
+  // ArduCopter flight mode numbers:
+  //   6 = RTL, 9 = LAND, 5 = LOITER, 16 = POSHOLD, 4 = GUIDED
+  const handleAbortMission = (mode = 6) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      // Send to both drones
+      [1, 2].forEach(sysid => {
+        wsRef.current.send(JSON.stringify({ action: 'SET_MODE', sysid, mode }));
+      });
+      const modeNames = { 6: 'RTL', 9: 'LAND', 5: 'LOITER', 16: 'POSHOLD' };
+      setMissionActive(false);
+      setToasts(prev => [...prev, { id: Date.now(), msg: `⚠️ MISSION ABORTED → ${modeNames[mode] || 'MODE ' + mode}` }]);
+    } else {
+      alert('WebSocket not connected');
+    }
   };
 
   // ── Arm / Disarm via WebSocket ──────────────────────────────────────────────
@@ -396,6 +415,8 @@ export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones
           setWaypointMode={setWaypointMode}
           hasWaypoints={waypoints && (waypoints[0].length > 0 || waypoints[1].length > 0)}
           onExecuteMission={handleExecuteMission}
+          onAbortMission={handleAbortMission}
+          missionActive={missionActive}
         />
       </main>
     </div>

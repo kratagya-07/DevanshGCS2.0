@@ -3,6 +3,7 @@ import dynamic from 'next/dynamic';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import VideoFeed from '../components/VideoFeed';
+import HUD from '../components/HUD';
 
 const LeafletMap = dynamic(() => import('../components/LeafletMap'), { ssr: false });
 
@@ -10,7 +11,19 @@ const LeafletMap = dynamic(() => import('../components/LeafletMap'), { ssr: fals
 // Drones start at map center so icons are visible immediately.
 // When real MAVLink GPS data arrives, they move to actual positions.
 // Drone key → MAVLink system-id: a → 1, b → 2
-const MAP_CENTER = { lat: 28.6139, lon: 77.209 }; // map default center
+const MAP_CENTER = { lat: 28.6139, lon: 77.209 }; // map default center (also GCS position)
+
+// ── Haversine distance (metres) ───────────────────────────────────────────────
+function haversineDist(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Earth radius in metres
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 const INITIAL_DRONES = {
   a: {
@@ -47,8 +60,13 @@ export default function Home({ geofenceArea, zones, waypoints, setToasts }) {
   const [baseLayer, setBaseLayer] = useState('street');
   const [cursor, setCursor] = useState(null);
   const [wsStatus, setWsStatus] = useState('DISCONNECTED');
+  const [hudExpanded, setHudExpanded] = useState({ a: false, b: false });
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
+
+  const toggleHud = (key) => setHudExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+  const expandBoth = () => setHudExpanded({ a: true, b: true });
+  const collapseBoth = () => setHudExpanded({ a: false, b: false });
 
   // ── Arm / Disarm via WebSocket ──────────────────────────────────────────────
   const toggleArm = (key) => {
@@ -203,9 +221,60 @@ export default function Home({ geofenceArea, zones, waypoints, setToasts }) {
               {cursor ? `LAT ${cursor.lat.toFixed(5)} · LON ${cursor.lng.toFixed(5)}` : 'LAT — · LON —'}
             </div>
           </div>
+
+          {/* HUD overlay - right bottom */}
+          <div style={{
+            position: 'absolute',
+            bottom: '12px',
+            right: '12px',
+            zIndex: 900,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            alignItems: 'flex-end',
+          }}>
+            {/* Expand Both button */}
+            <button
+              onClick={hudExpanded.a && hudExpanded.b ? collapseBoth : expandBoth}
+              title={hudExpanded.a && hudExpanded.b ? 'Collapse Both HUDs' : 'Expand Both HUDs'}
+              style={{
+                background: 'rgba(0,0,0,0.7)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                color: '#e2e8f0',
+                borderRadius: '4px',
+                padding: '3px 10px',
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                cursor: 'pointer',
+                letterSpacing: '0.05em',
+              }}
+            >
+              {hudExpanded.a && hudExpanded.b ? '⊟ COLLAPSE ALL' : '⛶ EXPAND ALL HUDs'}
+            </button>
+
+            {/* Both HUDs */}
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'flex-end' }}>
+            <HUD
+                drone={drones.a}
+                label={drones.a.id}
+                color={drones.a.color}
+                expanded={hudExpanded.a}
+                onToggleExpand={() => toggleHud('a')}
+                distGCS={drones.a.lat && drones.a.lon ? haversineDist(MAP_CENTER.lat, MAP_CENTER.lon, drones.a.lat, drones.a.lon) : null}
+              />
+              <HUD
+                drone={drones.b}
+                label={drones.b.id}
+                color={drones.b.color}
+                expanded={hudExpanded.b}
+                onToggleExpand={() => toggleHud('b')}
+                distGCS={drones.b.lat && drones.b.lon ? haversineDist(MAP_CENTER.lat, MAP_CENTER.lon, drones.b.lat, drones.b.lon) : null}
+              />
+            </div>
+          </div>
         </div>
 
-        <Sidebar drones={drones} followId={followId} setFollowId={setFollowId} toggleArm={toggleArm} />
+        <Sidebar drones={drones} followId={followId} setFollowId={setFollowId} toggleArm={toggleArm} wsRef={wsRef} />
       </main>
     </div>
   );

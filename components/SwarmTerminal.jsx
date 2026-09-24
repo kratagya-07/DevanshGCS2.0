@@ -39,8 +39,9 @@ export default function SwarmTerminal() {
   }, []);
 
   useEffect(() => {
-    if (endRef.current) {
-      endRef.current.scrollIntoView({ behavior: 'smooth' });
+    const el = endRef.current?.parentElement;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [logs]);
 

@@ -1,6 +1,7 @@
 import SwarmTerminal from './SwarmTerminal';
+import FailsafePanel from './FailsafePanel';
 
-export default function Sidebar({ drones, followId, setFollowId, toggleArm }) {
+export default function Sidebar({ drones, followId, setFollowId, toggleArm, wsRef }) {
   return (
     <aside className="sidebar">
       <div className="legend">
@@ -54,6 +55,8 @@ export default function Sidebar({ drones, followId, setFollowId, toggleArm }) {
           })}
         </div>
       </div>
+
+      <FailsafePanel wsRef={wsRef} drones={drones} />
 
       <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--panel-border)' }}>
         <SwarmTerminal />

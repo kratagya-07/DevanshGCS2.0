@@ -241,7 +241,9 @@ async def ws_handler(websocket):
         async for ws_msg in websocket:
             try:
                 data = json.loads(ws_msg)
-                if data.get("action") == "ARM":
+                action = data.get("action")
+
+                if action == "ARM":
                     sysid = data.get("sysid", 1)
                     arm = data.get("arm", 1)
                     if _mav_instance:
@@ -252,6 +254,47 @@ async def ws_handler(websocket):
                             arm, 0, 0, 0, 0, 0, 0
                         )
                         print(f"[WS] Sent ARM={arm} command to sysid={sysid}")
+
+                elif action == "PARAM_SET":
+                    sysid = data.get("sysid", 1)
+                    param_id = data.get("param_id", "")
+                    param_value = float(data.get("param_value", 0))
+                    if _mav_instance and param_id:
+                        # MAVLink param_id must be exactly 16 bytes (padded with \0)
+                        param_id_bytes = param_id.encode("utf-8")[:16].ljust(16, b"\x00")
+                        _mav_instance.mav.param_set_send(
+                            sysid, 1,
+                            param_id_bytes,
+                            param_value,
+                            mavutil.mavlink.MAV_PARAM_TYPE_REAL32
+                        )
+                        print(f"[WS] PARAM_SET {param_id}={param_value} → sysid={sysid}")
+
+                elif action == "PARAM_READ":
+                    sysid = data.get("sysid", 1)
+                    param_id = data.get("param_id", "")
+                    if _mav_instance and param_id:
+                        param_id_bytes = param_id.encode("utf-8")[:16].ljust(16, b"\x00")
+                        _mav_instance.mav.param_request_read_send(
+                            sysid, 1,
+                            param_id_bytes,
+                            -1  # use param_id string, not index
+                        )
+                        print(f"[WS] PARAM_READ {param_id} → sysid={sysid}")
+
+                elif action == "SET_MODE":
+                    sysid = data.get("sysid", 1)
+                    mode = data.get("mode", 6)  # default RTL=6
+                    if _mav_instance:
+                        _mav_instance.mav.command_long_send(
+                            sysid, 1,
+                            mavutil.mavlink.MAV_CMD_DO_SET_MODE,
+                            0,
+                            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                            mode, 0, 0, 0, 0, 0
+                        )
+                        print(f"[WS] SET_MODE mode={mode} → sysid={sysid}")
+
             except Exception as e:
                 print(f"[WS] Error processing msg: {e}")
     except Exception:
