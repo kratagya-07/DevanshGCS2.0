@@ -351,3 +351,7 @@ main{ flex:1; display:flex; min-height:0; }
 .upload-btn:hover {
   background: rgba(62, 214, 196, 0.2);
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

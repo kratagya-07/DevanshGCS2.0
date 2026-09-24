@@ -47,6 +47,7 @@ export default function Sidebar({ drones, followId, setFollowId, toggleArm }) {
                   <div>BATT: <b>{d.batt.toFixed(0)}</b>%</div>
                   <div>SPD: <b>{d.spd.toFixed(1)}</b></div>
                   <div>HDG: <b>{d.hdg.toFixed(0)}</b>°</div>
+                  <div>SATS: <b>{d.sats || 0}</b></div>
                 </div>
               </div>
             );

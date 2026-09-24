@@ -6,20 +6,45 @@ import MissionSidebar from '../components/MissionSidebar';
 
 const LeafletMap = dynamic(() => import('../components/LeafletMap'), { ssr: false });
 
+// ── Default drone state ───────────────────────────────────────────────────────
+// Drones start at map center so icons are visible immediately.
+// When real MAVLink GPS data arrives, they move to actual positions.
+const MAP_CENTER = { lat: 28.6139, lon: 77.209 };
+
 const INITIAL_DRONES = {
-  a: { id: 'DRONE-01', color: '#3ed6c4', lat: 28.6139, lon: 77.209, alt: 60, hdg: 0, spd: 6, batt: 96, armed: true, trail: [] },
-  b: { id: 'DRONE-02', color: '#e3a857', lat: 28.6205, lon: 77.215, alt: 55, hdg: 90, spd: 5, batt: 91, armed: true, trail: [] },
+  a: {
+    id: 'DRONE-01', color: '#3ed6c4',
+    lat: MAP_CENTER.lat, lon: MAP_CENTER.lon,
+    alt: 0, hdg: 0, spd: 0,
+    batt: 0, armed: false, trail: [],
+    connected: false,
+  },
+  b: {
+    id: 'DRONE-02', color: '#e3a857',
+    lat: MAP_CENTER.lat, lon: MAP_CENTER.lon,
+    alt: 0, hdg: 0, spd: 0,
+    batt: 0, armed: false, trail: [],
+    connected: false,
+  },
 };
 
-export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones, waypoints, setWaypoints }) {
+// ── MAVLink bridge config ─────────────────────────────────────────────────────
+const MAVLINK_WS_URL =
+  process.env.NEXT_PUBLIC_MAVLINK_WS_URL || 'ws://localhost:8088/ws/mavlink';
+
+const SYSID_MAP = { 1: 'a', 2: 'b' };
+
+export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones, waypoints, setWaypoints, setToasts }) {
   const [drones, setDrones] = useState(INITIAL_DRONES);
-  const [followId, setFollowId] = useState('a');
+  const [followId, setFollowId] = useState(null);
   const [baseLayer, setBaseLayer] = useState('street');
   const [cursor, setCursor] = useState(null);
   const [partitionMode, setPartitionMode] = useState('idle'); // 'idle', 'drawing'
   const [manualLine, setManualLine] = useState([]); // Array of 2 points [lat, lng]
   const [waypointMode, setWaypointMode] = useState('idle'); // 'idle', 'drone0', 'drone1'
-  const tRef = useRef(0);
+  const [wsStatus, setWsStatus] = useState('DISCONNECTED');
+  const wsRef = useRef(null);
+  const reconnectTimer = useRef(null);
 
   const handleFileUpload = (geojson) => {
     try {
@@ -193,63 +218,141 @@ export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones
     setCursor(latlng);
   };
 
-  const toggleArm = (key) => {
-    setDrones((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], armed: !prev[key].armed },
-    }));
+  const handleExecuteMission = () => {
+    if (!waypoints || (!waypoints[0].length && !waypoints[1].length)) {
+      alert("No waypoints to execute!");
+      return;
+    }
+    alert("Mission Executing! (Waypoints sent to drones...)");
+    // TODO: Send waypoints to drones via WebSocket or REST API
   };
 
+  // ── Arm / Disarm via WebSocket ──────────────────────────────────────────────
+  const toggleArm = (key) => {
+    const drone = drones[key];
+    const sysId = key === 'a' ? 1 : 2;
+    const arm = drone.armed ? 0 : 1;
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: "ARM", sysid: sysId, arm: arm }));
+    } else {
+      alert("WebSocket not connected");
+    }
+  };
+
+  // ── WebSocket telemetry listener ──────────────────────────────────────────
   useEffect(() => {
-    const id = setInterval(() => {
-      tRef.current += 1;
-      const t = tRef.current;
+    let active = true;
 
-      setDrones((prev) => {
-        const next = { ...prev };
+    function connect() {
+      if (!active) return;
+      setWsStatus('RECONNECTING');
+      const ws = new WebSocket(MAVLINK_WS_URL);
+      wsRef.current = ws;
 
-        if (prev.a.armed) {
-          const lat = 28.6139 + 0.004 * Math.sin(t / 20);
-          const lon = 77.209 + 0.004 * Math.cos(t / 20);
-          const trail = [...prev.a.trail, [lat, lon]].slice(-300);
-          next.a = {
-            ...prev.a,
-            lat, lon, trail,
-            alt: 60 + 5 * Math.sin(t / 15),
-            hdg: (t * 4) % 360,
-            spd: 5.5 + Math.sin(t / 10),
-            batt: Math.max(20, 96 - t * 0.05),
-          };
-        } else {
-          next.a = { ...prev.a, spd: 0 };
+      ws.onopen = () => {
+        if (!active) return ws.close();
+        setWsStatus('CONNECTED');
+        console.log('[MAVLink] Connected:', MAVLINK_WS_URL);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          const sysId = msg?.header?.system_id;
+          const key = SYSID_MAP[sysId];
+          if (!key) return;
+
+          const type = msg?.message?.type;
+
+          setDrones((prev) => {
+            const d = prev[key];
+            let updated = { ...d, connected: true };
+
+            if (type === 'GLOBAL_POSITION_INT') {
+              const m = msg.message;
+              const lat = m.lat / 1e7;
+              const lon = m.lon / 1e7;
+              if (lat !== 0 && lon !== 0) {
+                const trail = [...d.trail, [lat, lon]].slice(-300);
+                updated = {
+                  ...updated, lat, lon, trail,
+                  alt: m.relative_alt / 1000,
+                  hdg: m.hdg / 100,
+                  vx: m.vx / 100,
+                  vy: m.vy / 100,
+                  vz: m.vz / 100,
+                  spd: Math.hypot(m.vx / 100, m.vy / 100),
+                };
+              }
+            }
+
+            if (type === 'GPS_RAW_INT') {
+              updated = { ...updated, sats: msg.message.satellites_visible };
+            }
+
+            if (type === 'ATTITUDE') {
+              const m = msg.message;
+              updated = {
+                ...updated,
+                roll: (m.roll * 180) / Math.PI,
+                pitch: (m.pitch * 180) / Math.PI,
+                yaw: ((m.yaw * 180) / Math.PI + 360) % 360,
+              };
+            }
+
+            if (type === 'SYS_STATUS') {
+              updated = { ...updated, batt: msg.message.battery_remaining };
+            }
+
+            if (type === 'HEARTBEAT') {
+              const armed = !!(msg.message.base_mode & 128);
+              updated = { ...updated, armed };
+            }
+
+            if (type === 'STATUSTEXT') {
+              const text = msg.message.text;
+              if (text && (text.includes('PreArm:') || text.includes('check'))) {
+                setToasts(prev => [...prev, { id: Date.now(), msg: `DRONE-${sysId} PRE-ARM: ${text}` }]);
+              }
+            }
+
+            if (type === 'DISCONNECT') {
+              updated = { batt:0, armed:false, trail:[], vx:0, vy:0, vz:0, roll:0, pitch:0, yaw:0, connected:false, lat:0, lon:0, alt:0, hdg:0, spd:0, sats:0 };
+            }
+
+            return { ...prev, [key]: updated };
+          });
+        } catch (e) {
+          console.warn('[MAVLink] Parse error', e);
         }
+      };
 
-        if (prev.b.armed) {
-          const lat = 28.6205 + 0.003 * Math.cos(t / 25);
-          const lon = 77.215 + 0.003 * Math.sin(t / 25);
-          const trail = [...prev.b.trail, [lat, lon]].slice(-300);
-          next.b = {
-            ...prev.b,
-            lat, lon, trail,
-            alt: 55 + 4 * Math.cos(t / 18),
-            hdg: (t * 3 + 90) % 360,
-            spd: 4.8 + Math.cos(t / 12),
-            batt: Math.max(20, 91 - t * 0.04),
-          };
-        } else {
-          next.b = { ...prev.b, spd: 0 };
-        }
+      ws.onerror = (e) => console.warn('[MAVLink] WS error', e);
 
-        return next;
-      });
-    }, 1000);
+      ws.onclose = () => {
+        if (!active) return;
+        setWsStatus('DISCONNECTED');
+        setDrones((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((k) => { next[k] = { ...next[k], connected: false }; });
+          return next;
+        });
+        reconnectTimer.current = setTimeout(connect, 3000);
+      };
+    }
 
-    return () => clearInterval(id);
+    connect();
+    return () => {
+      active = false;
+      clearTimeout(reconnectTimer.current);
+      wsRef.current?.close();
+    };
   }, []);
 
   return (
     <div className="app">
       <Header activeTab="mission" />
+
       <main>
         <div className="map-col">
           <LeafletMap
@@ -291,6 +394,8 @@ export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones
           onClearWaypoints={handleClearWaypoints}
           waypointMode={waypointMode}
           setWaypointMode={setWaypointMode}
+          hasWaypoints={waypoints && (waypoints[0].length > 0 || waypoints[1].length > 0)}
+          onExecuteMission={handleExecuteMission}
         />
       </main>
     </div>

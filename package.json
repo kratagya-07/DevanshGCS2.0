@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently \"next dev\" \"python -u mavlink_ws_bridge.py\"",
     "build": "next build",
     "start": "next start"
   },
@@ -14,5 +14,8 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-leaflet": "4.2.1"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }

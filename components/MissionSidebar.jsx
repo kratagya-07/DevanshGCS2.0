@@ -10,7 +10,9 @@ export default function MissionSidebar({
   onAutoWaypoints,
   onClearWaypoints,
   waypointMode,
-  setWaypointMode
+  setWaypointMode,
+  hasWaypoints,
+  onExecuteMission
 }) {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -71,6 +73,17 @@ export default function MissionSidebar({
               </button>
               <button className="upload-btn" onClick={onClearWaypoints} style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
                 CLEAR WAYPOINTS
+              </button>
+            </div>
+          </>
+        )}
+
+        {hasWaypoints && (
+          <>
+            <h2>EXECUTION</h2>
+            <div style={{ marginTop: '16px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button className="upload-btn" onClick={onExecuteMission} style={{ background: 'rgba(34, 197, 94, 0.2)', borderColor: '#22c55e', color: '#22c55e', fontWeight: 'bold' }}>
+                EXECUTE MISSION
               </button>
             </div>
           </>
