@@ -54,6 +54,23 @@ function MapRefCapture({ mapRef }) {
   return null;
 }
 
+function FitBoundsController({ geofenceArea }) {
+  const map = useMap();
+  useEffect(() => {
+    if (geofenceArea && geofenceArea.length > 0) {
+      try {
+        const bounds = L.polygon(geofenceArea).getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { animate: true, padding: [30, 30] });
+        }
+      } catch (e) {
+        console.warn('Failed to fit bounds', e);
+      }
+    }
+  }, [geofenceArea, map]);
+  return null;
+}
+
 // Search bar rendered OUTSIDE MapContainer — no Leaflet event interference
 function SearchOverlay({ mapRef }) {
   const [query, setQuery] = useState('');
@@ -345,6 +362,7 @@ export default function LeafletMap({ drones, followId, baseLayer, onCursorMove, 
         <FollowController target={followTarget} followId={followId} />
         <MapEventsHandler onMove={onCursorMove} onClick={onMapClick} />
         <MapRefCapture mapRef={mapRef} />
+        <FitBoundsController geofenceArea={geofenceArea} />
       </MapContainer>
 
       {/* Search bar is OUTSIDE MapContainer — no Leaflet interference */}

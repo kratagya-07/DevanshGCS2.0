@@ -60,13 +60,8 @@ export default function Home({ geofenceArea, zones, waypoints, setToasts }) {
   const [baseLayer, setBaseLayer] = useState('street');
   const [cursor, setCursor] = useState(null);
   const [wsStatus, setWsStatus] = useState('DISCONNECTED');
-  const [hudExpanded, setHudExpanded] = useState({ a: false, b: false });
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
-
-  const toggleHud = (key) => setHudExpanded(prev => ({ ...prev, [key]: !prev[key] }));
-  const expandBoth = () => setHudExpanded({ a: true, b: true });
-  const collapseBoth = () => setHudExpanded({ a: false, b: false });
 
   // ── Arm / Disarm via WebSocket ──────────────────────────────────────────────
   const toggleArm = (key) => {
@@ -221,60 +216,17 @@ export default function Home({ geofenceArea, zones, waypoints, setToasts }) {
               {cursor ? `LAT ${cursor.lat.toFixed(5)} · LON ${cursor.lng.toFixed(5)}` : 'LAT — · LON —'}
             </div>
           </div>
-
-          {/* HUD overlay - right bottom */}
-          <div style={{
-            position: 'absolute',
-            bottom: '12px',
-            right: '12px',
-            zIndex: 900,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            alignItems: 'flex-end',
-          }}>
-            {/* Expand Both button */}
-            <button
-              onClick={hudExpanded.a && hudExpanded.b ? collapseBoth : expandBoth}
-              title={hudExpanded.a && hudExpanded.b ? 'Collapse Both HUDs' : 'Expand Both HUDs'}
-              style={{
-                background: 'rgba(0,0,0,0.7)',
-                border: '1px solid rgba(255,255,255,0.25)',
-                color: '#e2e8f0',
-                borderRadius: '4px',
-                padding: '3px 10px',
-                fontSize: '10px',
-                fontFamily: 'monospace',
-                cursor: 'pointer',
-                letterSpacing: '0.05em',
-              }}
-            >
-              {hudExpanded.a && hudExpanded.b ? '⊟ COLLAPSE ALL' : '⛶ EXPAND ALL HUDs'}
-            </button>
-
-            {/* Both HUDs */}
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'flex-end' }}>
-            <HUD
-                drone={drones.a}
-                label={drones.a.id}
-                color={drones.a.color}
-                expanded={hudExpanded.a}
-                onToggleExpand={() => toggleHud('a')}
-                distGCS={drones.a.lat && drones.a.lon ? haversineDist(MAP_CENTER.lat, MAP_CENTER.lon, drones.a.lat, drones.a.lon) : null}
-              />
-              <HUD
-                drone={drones.b}
-                label={drones.b.id}
-                color={drones.b.color}
-                expanded={hudExpanded.b}
-                onToggleExpand={() => toggleHud('b')}
-                distGCS={drones.b.lat && drones.b.lon ? haversineDist(MAP_CENTER.lat, MAP_CENTER.lon, drones.b.lat, drones.b.lon) : null}
-              />
-            </div>
-          </div>
         </div>
 
-        <Sidebar drones={drones} followId={followId} setFollowId={setFollowId} toggleArm={toggleArm} wsRef={wsRef} />
+        <Sidebar 
+          drones={drones} 
+          followId={followId} 
+          setFollowId={setFollowId} 
+          toggleArm={toggleArm} 
+          wsRef={wsRef} 
+          haversineDist={haversineDist}
+          MAP_CENTER={MAP_CENTER}
+        />
       </main>
     </div>
   );

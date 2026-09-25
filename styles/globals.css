@@ -301,7 +301,7 @@ main{ flex:1; display:flex; min-height:0; }
 }
 
 .sidebar{
-  width: 300px; flex-shrink:0;
+  width: 460px; flex-shrink:0;
   background: var(--panel);
   border-left: 1px solid var(--panel-border);
   padding: 18px; overflow-y:auto;

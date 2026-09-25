@@ -33,15 +33,15 @@ function drawHUD(canvas, drone, label, color, W, H, distGCS) {
 
   // Sky
   const skyGrad = ctx.createLinearGradient(0, -H * 2 + pitchPx, 0, pitchPx);
-  skyGrad.addColorStop(0, '#0a3452');
-  skyGrad.addColorStop(1, '#1a6fa8');
+  skyGrad.addColorStop(0, '#1E90FF'); // DodgerBlue
+  skyGrad.addColorStop(1, '#00BFFF'); // DeepSkyBlue
   ctx.fillStyle = skyGrad;
   ctx.fillRect(-W * 2, -H * 2 + pitchPx, W * 4, H * 2);
 
   // Ground
   const gndGrad = ctx.createLinearGradient(0, pitchPx, 0, H + pitchPx);
-  gndGrad.addColorStop(0, '#6b4a22');
-  gndGrad.addColorStop(1, '#3a2510');
+  gndGrad.addColorStop(0, '#FF8C00'); // DarkOrange
+  gndGrad.addColorStop(1, '#D2691E'); // Chocolate
   ctx.fillStyle = gndGrad;
   ctx.fillRect(-W * 2, pitchPx, W * 4, H * 2);
 
@@ -136,6 +136,8 @@ function drawHUD(canvas, drone, label, color, W, H, distGCS) {
   ctx.lineWidth = 1;
   ctx.strokeRect(tapePX, tapeCY - tapeH / 2, tapeW, tapeH);
 
+  const boxH = Math.max(22, W * 0.08);
+
   for (let s = Math.floor(spd - 30); s <= Math.ceil(spd + 30); s += 5) {
     if (s < 0) continue;
     const yPos = tapeCY + (spd - s) * (tapeH / 60);
@@ -147,10 +149,10 @@ function drawHUD(canvas, drone, label, color, W, H, distGCS) {
     ctx.textAlign = 'right';
     ctx.fillText(s, tapePX + tapeW - 9, yPos + 3);
   }
-  ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(tapePX, tapeCY - 11, tapeW, 22);
-  ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.5; ctx.strokeRect(tapePX, tapeCY - 11, tapeW, 22);
+  ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(tapePX, tapeCY - boxH / 2, tapeW, boxH);
+  ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.5; ctx.strokeRect(tapePX, tapeCY - boxH / 2, tapeW, boxH);
   ctx.fillStyle = '#facc15'; ctx.font = `bold ${Math.max(10, W * 0.05)}px monospace`;
-  ctx.textAlign = 'center'; ctx.fillText(spd.toFixed(1), tapePX + tapeW / 2, tapeCY + 4);
+  ctx.textAlign = 'center'; ctx.fillText(spd.toFixed(1), tapePX + tapeW / 2, tapeCY + boxH * 0.25);
   ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = `${Math.max(7, W * 0.032)}px monospace`;
   ctx.fillText('SPD', tapePX + tapeW / 2, tapeCY - tapeH / 2 - 3);
 
@@ -170,16 +172,16 @@ function drawHUD(canvas, drone, label, color, W, H, distGCS) {
     ctx.textAlign = 'left';
     ctx.fillText(a, altTapeX + 9, yPos + 3);
   }
-  ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(altTapeX, tapeCY - 11, tapeW, 22);
-  ctx.strokeStyle = color || '#3ed6c4'; ctx.lineWidth = 1.5; ctx.strokeRect(altTapeX, tapeCY - 11, tapeW, 22);
+  ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(altTapeX, tapeCY - boxH / 2, tapeW, boxH);
+  ctx.strokeStyle = color || '#3ed6c4'; ctx.lineWidth = 1.5; ctx.strokeRect(altTapeX, tapeCY - boxH / 2, tapeW, boxH);
   ctx.fillStyle = color || '#3ed6c4'; ctx.font = `bold ${Math.max(10, W * 0.05)}px monospace`;
-  ctx.textAlign = 'center'; ctx.fillText(alt.toFixed(1), altTapeX + tapeW / 2, tapeCY + 4);
+  ctx.textAlign = 'center'; ctx.fillText(alt.toFixed(1), altTapeX + tapeW / 2, tapeCY + boxH * 0.25);
   ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = `${Math.max(7, W * 0.032)}px monospace`;
   ctx.fillText('ALT', altTapeX + tapeW / 2, tapeCY - tapeH / 2 - 3);
   const vzColor = vz < -0.3 ? '#3ed6c4' : vz > 0.3 ? '#f97316' : '#888';
   ctx.fillStyle = vzColor; ctx.font = `${Math.max(8, W * 0.035)}px monospace`;
-  ctx.textAlign = 'left';
-  ctx.fillText(`${vz > 0 ? '↑' : vz < 0 ? '↓' : '→'}${Math.abs(vz).toFixed(1)}`, altTapeX + tapeW + 2, tapeCY + 4);
+  ctx.textAlign = 'right';
+  ctx.fillText(`${vz > 0 ? '↑' : vz < 0 ? '↓' : '→'}${Math.abs(vz).toFixed(1)}`, altTapeX - 4, tapeCY + 4);
 
   // ── HEADING TAPE (top) ────────────────────────────────────────────────────
   const hdgH = 24;
@@ -252,11 +254,11 @@ function drawHUD(canvas, drone, label, color, W, H, distGCS) {
   ctx.fillText(label || 'DRONE', 4, H - barH - 4);
 }
 
-export default function HUD({ drone, label, color, expanded, onToggleExpand, distGCS }) {
+export default function HUD({ drone, label, color, expanded, onToggleExpand, distGCS, width, height, hideExpand }) {
   const canvasRef = useRef(null);
 
-  const W = expanded ? 420 : 240;
-  const H = expanded ? 340 : 200;
+  const W = width || (expanded ? 420 : 240);
+  const H = height || (expanded ? 340 : 200);
 
   const roll  = drone?.roll;
   const pitch = drone?.pitch;
@@ -294,9 +296,10 @@ export default function HUD({ drone, label, color, expanded, onToggleExpand, dis
       <canvas ref={canvasRef} width={W} height={H} style={{ display: 'block' }} />
 
       {/* Expand / Minimize button overlay */}
-      <button
-        onClick={onToggleExpand}
-        title={expanded ? 'Minimize HUD' : 'Expand HUD'}
+      {!hideExpand && (
+        <button
+          onClick={onToggleExpand}
+          title={expanded ? 'Minimize HUD' : 'Expand HUD'}
         style={{
           position: 'absolute',
           top: '4px',
@@ -320,6 +323,7 @@ export default function HUD({ drone, label, color, expanded, onToggleExpand, dis
       >
         {expanded ? '⊟' : '⛶'}
       </button>
+      )}
     </div>
   );
 }

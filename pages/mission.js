@@ -112,18 +112,53 @@ export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones
     }
   };
 
-  const handleAutoPartition = () => {
+  const handleAutoPartition = (type = 'vertical') => {
     if (!geofenceArea) return;
     const poly = getTurfPoly(geofenceArea);
     const box = turf.bbox(poly);
+    
+    // add padding to box to ensure it fully covers the polygon
+    const minX = box[0] - 10, minY = box[1] - 10, maxX = box[2] + 10, maxY = box[3] + 10;
     const midX = (box[0] + box[2]) / 2;
-    const cutter = turf.polygon([[
-      [box[0] - 10, box[1] - 10],
-      [midX, box[1] - 10],
-      [midX, box[3] + 10],
-      [box[0] - 10, box[3] + 10],
-      [box[0] - 10, box[1] - 10]
-    ]]);
+    const midY = (box[1] + box[3]) / 2;
+    
+    let cutterCoords;
+    if (type === 'vertical') {
+      cutterCoords = [
+        [minX, minY],
+        [midX, minY],
+        [midX, maxY],
+        [minX, maxY],
+        [minX, minY]
+      ];
+    } else if (type === 'horizontal') {
+      cutterCoords = [
+        [minX, minY],
+        [maxX, minY],
+        [maxX, midY],
+        [minX, midY],
+        [minX, minY]
+      ];
+    } else if (type === 'diagonal1') {
+      // Top-Left to Bottom-Right split
+      // Cut with a triangle
+      cutterCoords = [
+        [minX, maxY],
+        [maxX, minY],
+        [minX, minY],
+        [minX, maxY]
+      ];
+    } else if (type === 'diagonal2') {
+      // Bottom-Left to Top-Right split
+      cutterCoords = [
+        [minX, minY],
+        [maxX, maxY],
+        [maxX, minY],
+        [minX, minY]
+      ];
+    }
+
+    const cutter = turf.polygon([cutterCoords]);
     splitAndSetZones(cutter);
   };
 
@@ -132,29 +167,73 @@ export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones
     setManualLine([]);
   };
 
-  const handleAutoWaypoints = () => {
+  const handleAutoWaypoints = (pattern = 'vertical') => {
     if (!zones || zones.length !== 2) return;
     const newWaypoints = { 0: [], 1: [] };
     
     zones.forEach((zone, index) => {
       const poly = getTurfPoly(zone);
-      const bbox = turf.bbox(poly);
-      
-      const stepX = (bbox[2] - bbox[0]) / 6;
-      const stepY = (bbox[3] - bbox[1]) / 6;
-      
+      let safePoly = poly;
+      try {
+        // Create a 1 meter inward buffer from partition/geofence
+        const buffered = turf.buffer(poly, -1, { units: 'meters' });
+        if (buffered && buffered.geometry) {
+          safePoly = buffered;
+        } else if (buffered && buffered.features && buffered.features.length > 0) {
+          safePoly = buffered.features[0];
+        }
+      } catch (e) {
+        console.warn('Buffer failed, using original polygon', e);
+      }
+
+      const bbox = turf.bbox(safePoly);
+      const numLines = pattern.startsWith('dense') ? 6 : 2; // 2 lines = ~4 waypoints
       let dir = 1;
-      for (let x = bbox[0] + stepX/2; x <= bbox[2]; x += stepX) {
-        let colPts = [];
-        for (let y = bbox[1] + stepY/2; y <= bbox[3]; y += stepY) {
-          const pt = turf.point([x, y]);
-          if (turf.booleanPointInPolygon(pt, poly)) {
-            colPts.push([y, x]);
+
+      if (pattern.includes('vertical')) {
+        const stepX = (bbox[2] - bbox[0]) / (numLines + 1);
+        for (let i = 1; i <= numLines; i++) {
+          const x = bbox[0] + stepX * i;
+          let insidePts = [];
+          const stepsY = 50; // sample resolution along line
+          const stepY = (bbox[3] - bbox[1]) / stepsY;
+          for (let j = 0; j <= stepsY; j++) {
+            const y = bbox[1] + stepY * j;
+            if (turf.booleanPointInPolygon(turf.point([x, y]), safePoly)) {
+              insidePts.push([y, x]); // leafet lat,lng
+            }
+          }
+          if (insidePts.length > 0) {
+            // Only keep the edges of the area (first and last valid points)
+            let linePts = [insidePts[0], insidePts[insidePts.length - 1]];
+            if (insidePts.length === 1) linePts = [insidePts[0]];
+            if (dir === -1) linePts.reverse();
+            newWaypoints[index].push(...linePts);
+            dir *= -1;
           }
         }
-        if (dir === -1) colPts.reverse();
-        newWaypoints[index].push(...colPts);
-        dir *= -1;
+      } else {
+        // horizontal sweep
+        const stepY = (bbox[3] - bbox[1]) / (numLines + 1);
+        for (let i = 1; i <= numLines; i++) {
+          const y = bbox[1] + stepY * i;
+          let insidePts = [];
+          const stepsX = 50;
+          const stepX = (bbox[2] - bbox[0]) / stepsX;
+          for (let j = 0; j <= stepsX; j++) {
+            const x = bbox[0] + stepX * j;
+            if (turf.booleanPointInPolygon(turf.point([x, y]), safePoly)) {
+              insidePts.push([y, x]);
+            }
+          }
+          if (insidePts.length > 0) {
+            let linePts = [insidePts[0], insidePts[insidePts.length - 1]];
+            if (insidePts.length === 1) linePts = [insidePts[0]];
+            if (dir === -1) linePts.reverse();
+            newWaypoints[index].push(...linePts);
+            dir *= -1;
+          }
+        }
       }
     });
     setWaypoints(newWaypoints);
@@ -202,15 +281,27 @@ export default function Mission({ geofenceArea, setGeofenceArea, zones, setZones
       if (!zones || zones.length !== 2) return;
       
       const poly = getTurfPoly(zones[droneIdx]);
+      let safePoly = poly;
+      try {
+        const buffered = turf.buffer(poly, -1, { units: 'meters' });
+        if (buffered && buffered.geometry) {
+          safePoly = buffered;
+        } else if (buffered && buffered.features && buffered.features.length > 0) {
+          safePoly = buffered.features[0];
+        }
+      } catch (e) {
+        console.warn('Buffer failed, using original polygon', e);
+      }
+      
       const pt = turf.point([latlng.lng, latlng.lat]);
       
-      if (turf.booleanPointInPolygon(pt, poly)) {
+      if (turf.booleanPointInPolygon(pt, safePoly)) {
         setWaypoints(prev => ({
           ...prev,
           [droneIdx]: [...prev[droneIdx], [latlng.lat, latlng.lng]]
         }));
       } else {
-        alert(`Invalid Point! Must be within Drone ${droneIdx + 1}'s zone.`);
+        alert(`Invalid Point! Must be at least 1 meter away from the boundaries of Drone ${droneIdx + 1}'s zone.`);
       }
     }
   };
